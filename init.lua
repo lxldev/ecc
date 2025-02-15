@@ -160,3 +160,59 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
         end
     end
 end)
+
+local chatlogs = {}
+local max_logs = 100
+
+-- Log chat messages
+minetest.register_on_chat_message(function(name, message)
+    table.insert(chatlogs, 1, {player = name, text = message, time = os.date("%H:%M:%S")})
+    if #chatlogs > max_logs then
+        table.remove(chatlogs)
+    end
+end)
+
+local function show_chatlogs(name)
+    if not minetest.check_player_privs(name, {staff = true}) then
+        return
+    end
+    
+    local formspec = "size[10,8]label[3,0;Chat Logs]"
+    for i, log in ipairs(chatlogs) do
+        local y = i * 0.5
+        formspec = formspec .. string.format("label[0,%f;%s: %s]", y, minetest.formspec_escape(log.player), minetest.formspec_escape(log.text))
+        formspec = formspec .. string.format("button[7,%f;1,0.5;kick_%d;Kick]", y, i)
+        formspec = formspec .. string.format("button[8,%f;1,0.5;ban_%d;Ban]", y, i)
+        formspec = formspec .. string.format("button[9,%f;1,0.5;mute_%d;Mute]", y, i)
+    end
+    
+    minetest.show_formspec(name, "ecc:chatlogs", formspec)
+end
+
+minetest.register_chatcommand("chatlogs", {
+    description = "View chat logs",
+    privs = {staff = true},
+    func = function(name)
+        show_chatlogs(name)
+    end
+})
+
+minetest.register_on_player_receive_fields(function(player, formname, fields)
+    if formname ~= "ecc:chatlogs" then return end
+    local name = player:get_player_name()
+    
+    for key, _ in pairs(fields) do
+        local action, id = key:match("(%a+)_(%d+)")
+        id = tonumber(id)
+        if action and id and chatlogs[id] then
+            local target = chatlogs[id].player
+            if action == "kick" then
+                minetest.kick_player(target, "You have been kicked by staff.")
+            elseif action == "ban" then
+                minetest.ban_player(target)
+            elseif action == "mute" then
+                minetest.chat_send_player(target, "You have been muted by staff.")
+            end
+        end
+    end
+end)
